@@ -1,0 +1,7 @@
+<Solution>
+  <Configurations>
+    <Platform Name="x64" />
+    <Platform Name="x86" />
+  </Configurations>
+  <Project Path="AvUpdateProject/AvUpdateProject.vcxproj" Id="051edd9a-d850-4060-b61d-81ff2ea163a9" />
+</Solution>
