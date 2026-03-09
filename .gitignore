@@ -1,0 +1,24 @@
+# Visual Studio v15 solution and project files
+.vs/
+/x64/
+/Debug/
+/Release/
+
+# Compiled Object files
+*.obj
+*.ilk
+*.pdb
+*.tlog
+*.lastbuildstate
+*.idb
+*.exe
+*.dll
+*.lib
+
+# CMake
+/out/
+/build/
+
+# Các file tạm khác
+*.log
+*.tmp
