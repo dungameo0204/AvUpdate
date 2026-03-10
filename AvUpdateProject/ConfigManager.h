@@ -6,8 +6,9 @@ namespace ConfigManager {
     struct AppConfig {
         std::wstring server_domain;
         std::wstring api_path;
+        std::string download_base_path;
         std::string download_folder;
-        std::string app_root_dir; // Thư mục gốc chuẩn xác chứa file .exe
+        std::string target_install_dir;
     };
 
     // Hàm load cấu hình
