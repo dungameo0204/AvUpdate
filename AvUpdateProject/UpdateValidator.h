@@ -13,13 +13,23 @@ namespace fs = std::filesystem;
 
 namespace UpdateValidator {
 
-    // 2.1. Kiểm tra xem AV có đang quét không (Giả lập)
+    // =========================================================================
+    // 2.1. SOÁT VÉ: NHÌN CỜ MUTEX ĐỂ BIẾT CHÍNH XÁC AV CÓ ĐANG QUÉT HAY KHÔNG
+    // =========================================================================
     inline bool IsAvScanning() {
-        // Trong thực tế, bác có thể check Named Mutex hoặc Shared Memory từ file MyService.exe
-        // Hiện tại trả về false để cho phép update.
+        // Đứng từ xa ngó xem có cái cờ nào tên là "AvActiveScanMutex" đang cắm không
+        // (Dùng quyền SYNCHRONIZE là đủ để ngó, không cần cấp quyền sửa đổi)
+        HANDLE hMutex = OpenMutexW(SYNCHRONIZE, FALSE, L"Global\\AvActiveScanMutex");
+
+        if (hMutex != NULL) {
+            // THẤY CỜ! -> Service đang bận quét thật sự.
+            CloseHandle(hMutex); // Ngó xong thì bỏ tay ra để OS không bị rò rỉ bộ nhớ
+            return true;
+        }
+
+        // KHÔNG THẤY CỜ! -> Service đang rảnh rỗi, hoặc vừa bị Cancel, hoặc đang tắt.
         return false;
     }
-
     // 2.3.1. So sánh Version (Trả về true nếu bản Mới > bản Cũ)
     inline bool IsNewerVersion(const std::string& newVer, const std::string& oldVer) {
         // Thuật toán so sánh chuỗi version (VD: 2.0.0 > 1.9.9) đơn giản:

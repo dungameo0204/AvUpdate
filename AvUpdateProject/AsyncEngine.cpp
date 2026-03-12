@@ -228,7 +228,19 @@ namespace AsyncEngine {
 
                 if (Downloader::DownloadFile(cfg.server_domain, fileDownloadPath, saveTempLocation)) {
                     std::string downloadedHash = UpdateValidator::CalculateSHA256(saveTempLocation);
-                    if (downloadedHash == file.md5) {
+                    // ==============================================================
+                    // [BẬT ĐÈN PHA CHÓI LÓA TÓM GỌN LỖI HASH]
+                    // ==============================================================
+                    std::cout << "\n[DEBUG HASH] Dang kiem tra file: " << file.path << std::endl;
+                    std::cout << "   -> Hash file VUA TAI VE (SHA256): " << downloadedHash << std::endl;
+                    std::cout << "   -> Hash tren SERVER JSON (md5):   " << file.md5 << std::endl;
+
+                    // Ép cả 2 thằng về chữ thường (lowercase) để so sánh cho công bằng
+                    std::string hash1 = downloadedHash;
+                    std::string hash2 = file.md5;
+                    std::transform(hash1.begin(), hash1.end(), hash1.begin(), ::tolower);
+                    std::transform(hash2.begin(), hash2.end(), hash2.begin(), ::tolower);
+                    if (hash1 == hash2) {
                         std::string finalLocation = (fullDownloadDir / file.path).string();
                         fs::create_directories(fs::path(finalLocation).parent_path());
                         if (fs::exists(finalLocation)) fs::remove(finalLocation);
@@ -317,6 +329,45 @@ namespace AsyncEngine {
                     }
                 }
             }
+            // =================================================================
+            // [MODULE MỚI]: CHỜ ĐỢI AV QUÉT XONG & TỈA SÚNG UI DYNAMIC
+            // =================================================================
+
+            // 1. CHỜ ĐỢI SERVICE QUÉT XONG
+            if (UpdateValidator::IsAvScanning()) {
+                UpdateState::SetStatus(92.0, "He thong dang ban quet Virus. Vui long cho...");
+                std::cout << "[*] AV dang ban quet. Dua vao trang thai CHO (Wait State)..." << std::endl;
+
+                // Luồng ngầm nên ngủ bao lâu cũng được, Python UI không bị đơ!
+                while (UpdateValidator::IsAvScanning()) {
+                    Sleep(5000);
+                }
+                std::cout << "[+] AV da quet xong! Tiep tuc qua trinh Update..." << std::endl;
+            }
+
+            // 2. SÁT THỦ CÓ DANH SÁCH (Dynamic Kill UI đang mở)
+            UpdateState::SetStatus(94.0, "Dang dong cac ung dung dang mo...");
+            std::cout << "[*] Kich hoat che do TIA SUNG (Dynamic Kill)..." << std::endl;
+
+            for (const auto& file : downloadedFiles) {
+                fs::path p(file);
+                if (p.extension() == ".exe") {
+                    std::string exeName = p.filename().string();
+                    std::string lowerExeName = exeName;
+                    std::transform(lowerExeName.begin(), lowerExeName.end(), lowerExeName.begin(), ::tolower);
+
+                    // Tuyệt đối không tự sát!
+                    if (lowerExeName != "avupdater.exe" && lowerExeName != "avupdateproject.exe" && lowerExeName != "applauncher.exe") {
+                        std::cout << "   -> Dang Kill tien trinh: " << exeName << std::endl;
+                        std::string killCmd = "taskkill /F /IM " + exeName + " >nul 2>&1";
+                        system(killCmd.c_str());
+                    }
+                }
+            }
+            Sleep(1500); // Đợi 1.5s cho UI sập hẳn
+
+            UpdateState::SetStatus(95.0, "Tien hanh phau thuat chep de file...");
+            // =================================================================
 
             // TẮT SERVICE VÀ ĐÈ FILE
             if (ServiceKiller::StopServiceTask(L"AvScanVirus")) {
@@ -486,9 +537,7 @@ namespace AsyncEngine {
         }
     }
 
-    // =====================================================================
-    // [HÀM CŨ] DÀNH CHO NÚT "HẠ CẤP BẢN CŨ" TỪ UI PYTHON
-    // =====================================================================
+
     // =====================================================================
     // HÀM ROLLBACK THỦ CÔNG (ĐƯỢC GỌI TỪ NÚT BẤM TRÊN UI HOẶC LỆNH BÀI)
     // =====================================================================
@@ -500,9 +549,6 @@ namespace AsyncEngine {
             std::string targetInstallDir = GetInstallDirFromService();
             std::string backupRootDir = targetInstallDir + "\\backups";
 
-            // =====================================================================
-            // [FIX 1] TÌM XEM CÓ BẢN BACKUP NÀO KHÔNG TRƯỚC KHI TẮT SERVICE!
-            // =====================================================================
             std::string latestBackup = "";
             fs::file_time_type latestTime = (fs::file_time_type::min)();
 
@@ -518,29 +564,59 @@ namespace AsyncEngine {
                 }
             }
 
-            // NẾU KHÔNG CÓ BACKUP NÀO -> DỪNG NGAY LẬP TỨC ĐỂ BẢO TOÀN SERVICE!
             if (latestBackup.empty()) {
-                // Bắn đúng câu thần chú để UI Python hiển thị bảng xám "Đã ở phiên bản gốc"
                 UpdateState::SetStatus(99.0, "He thong dang o phien ban cu nhat, khong the ha cap them!");
                 UpdateState::IS_UPDATING = false;
                 return;
             }
 
-            // =====================================================================
-            // NẾU CÓ BACKUP -> TẮT SERVICE VÀ TIẾN HÀNH PHỤC HỒI
-            // =====================================================================
+            // =================================================================
+            // [BỌC THÉP CHO ROLLBACK]: CHỜ ĐỢI AV QUÉT & TỈA SÚNG DYNAMIC
+            // =================================================================
+
+            // 1. CHỜ ĐỢI SERVICE QUÉT XONG (Bằng Radar Ống nước)
+            if (UpdateValidator::IsAvScanning()) {
+                UpdateState::SetStatus(30.0, "He thong dang ban quet Virus. Vui long cho...");
+                std::cout << "[*] AV dang ban quet. Dua vao trang thai CHO Rollback..." << std::endl;
+
+                while (UpdateValidator::IsAvScanning()) {
+                    Sleep(5000);
+                }
+                std::cout << "[+] AV da quet xong! Tiep tuc qua trinh Rollback..." << std::endl;
+            }
+
+            // 2. SÁT THỦ ĐỌC DANH SÁCH TỪ THƯ MỤC BACKUP
+            UpdateState::SetStatus(35.0, "Dang dong cac ung dung dang mo...");
+            std::cout << "[*] Kich hoat che do TIA SUNG cho Rollback..." << std::endl;
+
+            if (fs::exists(latestBackup)) {
+                for (auto it = fs::recursive_directory_iterator(latestBackup); it != fs::recursive_directory_iterator(); ++it) {
+                    if (it->is_regular_file() && it->path().extension() == ".exe") {
+                        std::string exeName = it->path().filename().string();
+                        std::string lowerExeName = exeName;
+                        std::transform(lowerExeName.begin(), lowerExeName.end(), lowerExeName.begin(), ::tolower);
+
+                        // Tha cho các công thần của hệ thống Update
+                        if (lowerExeName != "avupdater.exe" && lowerExeName != "avupdateproject.exe" && lowerExeName != "applauncher.exe") {
+                            std::cout << "   -> Dang Kill tien trinh UI: " << exeName << std::endl;
+                            std::string killCmd = "taskkill /F /IM " + exeName + " >nul 2>&1";
+                            system(killCmd.c_str());
+                        }
+                    }
+                }
+            }
+            Sleep(1500); // Đợi 1.5 giây cho Windows thu dọn xác chết
+            // =================================================================
+
             UpdateState::SetStatus(40.0, "Tim thay ban an toan, dang dung Service...");
+
+            // TẮT SERVICE VÀ TIẾN HÀNH PHỤC HỒI
             if (ServiceKiller::StopServiceTask(L"AvScanVirus")) {
 
                 std::cout << "[*] Dang cho Service nha file ra..." << std::endl;
                 Sleep(2000);
 
-                // Hàm RollbackUpdate sẽ tự động moi móc file từ latestBackup đè ra ngoài
                 if (RollbackUpdate(targetInstallDir)) {
-
-                    // ====================================================================
-                    // [FIX 2]: VẮT CHANH BỎ VỎ! DÙNG XONG PHẢI ĐỐT LUÔN BACKUP ĐÓ ĐỂ LÀM UNDO
-                    // ====================================================================
                     try {
                         std::cout << "[*] Da dung xong backup, tien hanh xoa: " << latestBackup << std::endl;
                         fs::remove_all(latestBackup);
